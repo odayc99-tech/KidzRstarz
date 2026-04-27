@@ -1,7 +1,23 @@
 document.getElementById('form').onsubmit = async (e) => {
   e.preventDefault();
 
-  const data = Object.fromEntries(new FormData(e.target));
+  const form = new FormData(e.target);
+  const photo = form.get('photo');
+
+  let photoPreview = '';
+
+  if (photo && photo.size > 0) {
+    photoPreview = await fileToDataUrl(photo);
+  }
+
+  const data = {
+    childName: form.get('childName'),
+    age: form.get('age'),
+    theme: form.get('theme'),
+    message: form.get('message'),
+    photoName: photo?.name || '',
+    photoPreview
+  };
 
   const response = await fetch('/api/orders', {
     method: 'POST',
@@ -23,12 +39,22 @@ document.getElementById('form').onsubmit = async (e) => {
 
 function showStoryPreview(order) {
   document.body.innerHTML = `
-    <section style="padding:60px; font-family:Arial; max-width:800px; margin:auto;">
+    <section style="padding:60px; font-family:Arial; max-width:900px; margin:auto;">
       <h1>Story Preview Created 🎉</h1>
       <p><strong>Order ID:</strong> ${order.id}</p>
 
+      ${order.photoPreview ? `
+        <img src="${order.photoPreview}" alt="Uploaded child photo" style="max-width:220px;border-radius:20px;margin:20px 0;" />
+      ` : ''}
+
       <h2>${order.childName}'s Story</h2>
-      <p style="font-size:18px; line-height:1.6">${order.story}</p>
+
+      ${order.scenes.map((scene, index) => `
+        <article style="background:#f3f0ff;padding:20px;border-radius:14px;margin:16px 0;">
+          <h3>Scene ${index + 1}</h3>
+          <p style="font-size:18px; line-height:1.6">${scene}</p>
+        </article>
+      `).join('')}
 
       <p><strong>Status:</strong> <span id="status">${order.status}</span></p>
 
@@ -70,4 +96,13 @@ function showStoryPreview(order) {
       alert('Checkout step comes next.');
     };
   };
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
