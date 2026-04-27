@@ -144,3 +144,28 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
+async function pollVideoStatus(orderId) {
+  const interval = setInterval(async () => {
+    const response = await fetch(`/api/orders/${orderId}`);
+    const result = await response.json();
+
+    if (result.order.status === 'completed') {
+      clearInterval(interval);
+
+      document.body.innerHTML = `
+        <section style="padding:60px; font-family:Arial; max-width:800px; margin:auto;">
+          <h1>Video Complete 🎉</h1>
+          <p>Your KidzRstarz storybook video is ready.</p>
+
+          <a href="${result.order.videoUrl}" style="background:#00b894;color:white;padding:14px 22px;border-radius:25px;text-decoration:none;display:inline-block;">
+            Download Video
+          </a>
+
+          <p style="margin-top:30px;">
+            <a href="/">Create another</a>
+          </p>
+        </section>
+      `;
+    }
+  }, 2000);
+}
