@@ -38,6 +38,21 @@ app.post('/api/orders', (req, res) => {
   res.json({ order });
 });
 
+app.post('/api/orders/:id/approve', (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
+  order.status = 'approved';
+  order.approvedAt = new Date().toISOString();
+
+  orders.set(order.id, order);
+
+  res.json({ order });
+});
+
 app.get('*', (req, res) => {
   res.sendFile(process.cwd() + '/index.html');
 });
