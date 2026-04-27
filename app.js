@@ -91,7 +91,6 @@ function showStoryPreview(order) {
     document.getElementById('status').textContent = result.order.status;
     document.getElementById('approveBtn').style.display = 'none';
     document.getElementById('checkoutBox').style.display = 'block';
-
     document.getElementById('checkoutBtn').onclick = async () => {
   const response = await fetch(`/api/orders/${order.id}/checkout`, {
     method: 'POST'
@@ -99,12 +98,27 @@ function showStoryPreview(order) {
 
   const result = await response.json();
 
-  if (result.url) {
-    window.location.href = result.url;
-  } else {
-    alert('Payment simulated (Stripe not connected yet)');
+  if (!response.ok) {
+    alert(result.error || 'Checkout failed');
+    return;
   }
+
+  // update UI
+  document.getElementById('status').textContent = result.order.status;
+
+  document.getElementById('checkoutBox').innerHTML = `
+    <h2>Payment Complete 🎉</h2>
+    <p>Your story has been paid for.</p>
+    <button id="generateBtn" style="background:#00b894;color:white;padding:12px 20px;border:none;border-radius:25px;cursor:pointer;">
+      Generate Video
+    </button>
+  `;
+
+  document.getElementById('generateBtn').onclick = () => {
+    alert('Video generation comes next.');
+  };
 };
+   
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
