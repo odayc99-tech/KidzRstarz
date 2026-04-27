@@ -114,9 +114,25 @@ function showStoryPreview(order) {
     </button>
   `;
 
-  document.getElementById('generateBtn').onclick = () => {
-    alert('Video generation comes next.');
-  };
+ document.getElementById('generateBtn').onclick = async () => {
+  document.getElementById('checkoutBox').innerHTML = `
+    <h2>Rendering Video 🎬</h2>
+    <p>Your storybook video is being generated. This may take a moment.</p>
+  `;
+
+  const response = await fetch(`/api/orders/${order.id}/generate-video`, {
+    method: 'POST'
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    alert(result.error || 'Video generation failed');
+    return;
+  }
+
+  pollVideoStatus(order.id);
+};
 };
    
 
