@@ -15,7 +15,7 @@
     <div>
       <p class="badge">Personalized storybook videos</p>
       <h1>Turn your child into the star of a magical video.</h1>
-      <p>Create a custom storybook video with your child’s name, theme, story, narration, and downloadable MP4.</p>
+      <p>Create a custom storybook video with your child’s photo, name, theme, story, narration, and downloadable MP4.</p>
       <a class="button" href="#create">Create My Story</a>
     </div>
   </section>
@@ -23,18 +23,9 @@
   <section class="steps">
     <h2>How it works</h2>
     <div class="grid">
-      <article>
-        <h3>1. Tell us about your child</h3>
-        <p>Add their name, age, favorite theme, and special message.</p>
-      </article>
-      <article>
-        <h3>2. Review the story</h3>
-        <p>Approve the story before video rendering begins.</p>
-      </article>
-      <article>
-        <h3>3. Download the video</h3>
-        <p>Receive a magical MP4 keepsake to share with family.</p>
-      </article>
+      <article><h3>1. Upload a photo</h3><p>Add your child’s picture and story details.</p></article>
+      <article><h3>2. Review the story</h3><p>Approve the story before video rendering begins.</p></article>
+      <article><h3>3. Download the video</h3><p>Receive a magical MP4 keepsake to share.</p></article>
     </div>
   </section>
 
@@ -44,6 +35,7 @@
       <input name="childName" placeholder="Child's name" required />
       <input name="age" placeholder="Age" required />
       <input name="theme" placeholder="Theme, e.g. princess, dinosaurs, space" required />
+      <input name="photo" type="file" accept="image/*" required />
       <textarea name="message" placeholder="Special message"></textarea>
       <button>Create Story Preview</button>
     </form>
