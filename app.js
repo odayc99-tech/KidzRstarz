@@ -91,50 +91,35 @@ function showStoryPreview(order) {
     document.getElementById('status').textContent = result.order.status;
     document.getElementById('approveBtn').style.display = 'none';
     document.getElementById('checkoutBox').style.display = 'block';
+
     document.getElementById('checkoutBtn').onclick = async () => {
-  const response = await fetch(`/api/orders/${order.id}/checkout`, {
-    method: 'POST'
-  });
+      const response = await fetch(`/api/orders/${order.id}/checkout`, {
+        method: 'POST'
+      });
 
-  const result = await response.json();
+      const result = await response.json();
 
-  if (!response.ok) {
-    alert(result.error || 'Checkout failed');
-    return;
-  }
+      if (!response.ok) {
+        alert(result.error || 'Checkout failed');
+        return;
+      }
 
-  // update UI
-  document.getElementById('status').textContent = result.order.status;
+      document.getElementById('status').textContent = result.order.status;
 
-  document.getElementById('checkoutBox').innerHTML = `
-    <h2>Payment Complete 🎉</h2>
-    <p>Your story has been paid for.</p>
-    <button id="generateBtn" style="background:#00b894;color:white;padding:12px 20px;border:none;border-radius:25px;cursor:pointer;">
-      Generate Video
-    </button>
-  `;
+      document.getElementById('checkoutBox').innerHTML = `
+        <h2>Payment Complete 🎉</h2>
+        <p>Your story has been paid for.</p>
+        <button id="generateBtn" style="background:#00b894;color:white;padding:12px 20px;border:none;border-radius:25px;cursor:pointer;">
+          Generate Video
+        </button>
+      `;
 
- document.getElementById('generateBtn').onclick = async () => {
-  document.getElementById('checkoutBox').innerHTML = `
-    <h2>Rendering Video 🎬</h2>
-    <p>Your storybook video is being generated. This may take a moment.</p>
-  `;
-
-  const response = await fetch(`/api/orders/${order.id}/generate-video`, {
-    method: 'POST'
-  });
-
-  const result = await response.json();
-
-  if (!response.ok) {
-    alert(result.error || 'Video generation failed');
-    return;
-  }
-
-  pollVideoStatus(order.id);
-};
-};
-   
+      document.getElementById('generateBtn').onclick = () => {
+        alert('Video generation comes next.');
+      };
+    };
+  };
+}
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -143,29 +128,4 @@ function fileToDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-async function pollVideoStatus(orderId) {
-  const interval = setInterval(async () => {
-    const response = await fetch(`/api/orders/${orderId}`);
-    const result = await response.json();
-
-    if (result.order.status === 'completed') {
-      clearInterval(interval);
-
-      document.body.innerHTML = `
-        <section style="padding:60px; font-family:Arial; max-width:800px; margin:auto;">
-          <h1>Video Complete 🎉</h1>
-          <p>Your KidzRstarz storybook video is ready.</p>
-
-          <a href="${result.order.videoUrl}" style="background:#00b894;color:white;padding:14px 22px;border-radius:25px;text-decoration:none;display:inline-block;">
-            Download Video
-          </a>
-
-          <p style="margin-top:30px;">
-            <a href="/">Create another</a>
-          </p>
-        </section>
-      `;
-    }
-  }, 2000);
 }
