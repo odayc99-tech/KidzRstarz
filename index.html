@@ -3,17 +3,51 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KidzRstarz</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Create Video</h1>
+  <nav>
+    <strong>🦄 KidzRstarz</strong>
+    <a href="#create">Create Now</a>
+  </nav>
 
-  <form id="form">
-    <input name="childName" placeholder="Name" required />
-    <input name="age" placeholder="Age" required />
-    <input name="theme" placeholder="Theme" required />
-    <textarea name="message" placeholder="Message"></textarea>
-    <button>Create</button>
-  </form>
+  <section class="hero">
+    <div>
+      <p class="badge">Personalized storybook videos</p>
+      <h1>Turn your child into the star of a magical video.</h1>
+      <p>Create a custom storybook video with your child’s name, theme, story, narration, and downloadable MP4.</p>
+      <a class="button" href="#create">Create My Story</a>
+    </div>
+  </section>
+
+  <section class="steps">
+    <h2>How it works</h2>
+    <div class="grid">
+      <article>
+        <h3>1. Tell us about your child</h3>
+        <p>Add their name, age, favorite theme, and special message.</p>
+      </article>
+      <article>
+        <h3>2. Review the story</h3>
+        <p>Approve the story before video rendering begins.</p>
+      </article>
+      <article>
+        <h3>3. Download the video</h3>
+        <p>Receive a magical MP4 keepsake to share with family.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="create" class="form-section">
+    <h2>Create Video</h2>
+    <form id="form">
+      <input name="childName" placeholder="Child's name" required />
+      <input name="age" placeholder="Age" required />
+      <input name="theme" placeholder="Theme, e.g. princess, dinosaurs, space" required />
+      <textarea name="message" placeholder="Special message"></textarea>
+      <button>Create Story Preview</button>
+    </form>
+  </section>
 
   <script src="app.js"></script>
 </body>
