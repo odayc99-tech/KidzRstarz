@@ -92,11 +92,19 @@ function showStoryPreview(order) {
     document.getElementById('approveBtn').style.display = 'none';
     document.getElementById('checkoutBox').style.display = 'block';
 
-    document.getElementById('checkoutBtn').onclick = () => {
-      alert('Checkout step comes next.');
-    };
-  };
-}
+    document.getElementById('checkoutBtn').onclick = async () => {
+  const response = await fetch(`/api/orders/${order.id}/checkout`, {
+    method: 'POST'
+  });
+
+  const result = await response.json();
+
+  if (result.url) {
+    window.location.href = result.url;
+  } else {
+    alert('Payment simulated (Stripe not connected yet)');
+  }
+};
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
