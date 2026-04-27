@@ -114,9 +114,42 @@ function showStoryPreview(order) {
         </button>
       `;
 
-      document.getElementById('generateBtn').onclick = () => {
-        alert('Video generation comes next.');
-      };
+     document.getElementById('generateBtn').onclick = async () => {
+  const response = await fetch(`/api/orders/${order.id}/generate-video`, {
+    method: 'POST'
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    alert(result.error || 'Failed to start video generation');
+    return;
+  }
+
+  document.getElementById('checkoutBox').innerHTML = `
+    <h2>Rendering Started 🎬</h2>
+    <p>Your video is being generated. This usually takes a few seconds.</p>
+    <button id="checkStatusBtn">Check Status</button>
+  `;
+
+  document.getElementById('checkStatusBtn').onclick = async () => {
+    const res = await fetch(`/api/orders/${order.id}`);
+    const data = await res.json();
+
+    if (data.order.status === 'completed') {
+      document.body.innerHTML = `
+        <section style="padding:60px; font-family:Arial;">
+          <h1>Video Ready 🎉</h1>
+          <a href="${data.order.videoUrl}" download>
+            Download Video
+          </a>
+        </section>
+      `;
+    } else {
+      alert('Still rendering... try again in a few seconds');
+    }
+  };
+};
     };
   };
 }
