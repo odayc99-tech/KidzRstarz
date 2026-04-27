@@ -1,4 +1,92 @@
 body {
-  font-family: Arial;
-  padding: 40px;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  background: #f9f9ff;
+  color: #222;
+}
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 40px;
+  background: white;
+  border-bottom: 1px solid #eee;
+}
+
+nav a {
+  text-decoration: none;
+  color: #7c3cff;
+  font-weight: bold;
+}
+
+.hero {
+  padding: 80px 40px;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: 40px;
+  margin-bottom: 20px;
+}
+
+.hero p {
+  max-width: 600px;
+  margin: auto;
+  margin-bottom: 20px;
+}
+
+.button {
+  background: #7c3cff;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 25px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.steps {
+  padding: 60px 40px;
+  background: #fff;
+  text-align: center;
+}
+
+.grid {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+article {
+  background: #f3f0ff;
+  padding: 20px;
+  border-radius: 10px;
+  width: 250px;
+}
+
+.form-section {
+  padding: 60px 40px;
+  text-align: center;
+}
+
+form {
+  max-width: 400px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+input, textarea {
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+}
+
+button {
+  background: #ff4fa3;
+  color: white;
+  padding: 12px;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
 }
