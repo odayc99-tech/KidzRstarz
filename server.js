@@ -42,7 +42,8 @@ app.post('/api/orders', (req, res) => {
     photoPreview,
     scenes,
     story: scenes.join('\n\n'),
-    status: 'story_ready'
+    status: 'story_ready',
+    videoReady: false
   };
 
   orders.set(id, order);
@@ -52,9 +53,7 @@ app.post('/api/orders', (req, res) => {
 app.post('/api/orders/:id/approve', (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   order.status = 'approved';
   order.approvedAt = new Date().toISOString();
@@ -66,9 +65,7 @@ app.post('/api/orders/:id/approve', (req, res) => {
 app.post('/api/orders/:id/checkout', async (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   if (order.status !== 'approved') {
     return res.status(400).json({ error: 'Order must be approved first.' });
@@ -78,8 +75,61 @@ app.post('/api/orders/:id/checkout', async (req, res) => {
   order.paidAt = new Date().toISOString();
 
   orders.set(order.id, order);
+  res.json({ order });
+});
+
+app.post('/api/orders/:id/generate-video', (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (order.status !== 'paid') {
+    return res.status(400).json({ error: 'Order must be paid before video generation.' });
+  }
+
+  order.status = 'rendering';
+  order.videoJobId = `video_${Math.random().toString(36).slice(2, 10)}`;
+
+  orders.set(order.id, order);
+
+  setTimeout(() => {
+    const updated = orders.get(order.id);
+    if (!updated) return;
+
+    updated.status = 'completed';
+    updated.videoReady = true;
+    updated.videoUrl = `/api/orders/${updated.id}/download`;
+
+    orders.set(updated.id, updated);
+  }, 5000);
 
   res.json({ order });
+});
+
+app.get('/api/orders/:id', (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  res.json({ order });
+});
+
+app.get('/api/orders/:id/download', (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!order.videoReady) {
+    return res.status(400).json({ error: 'Video is not ready yet.' });
+  }
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="kidzrstarz-${order.id}-video-placeholder.txt"`
+  );
+
+  res.send(`This is where the completed MP4 video for ${order.childName} will download.`);
 });
 
 app.get('*', (req, res) => {
