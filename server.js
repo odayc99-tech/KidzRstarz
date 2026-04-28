@@ -50,10 +50,22 @@ app.post('/api/orders', (req, res) => {
   res.json({ order });
 });
 
+app.get('/api/orders/:id', (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
+  res.json({ order });
+});
+
 app.post('/api/orders/:id/approve', (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   order.status = 'approved';
   order.approvedAt = new Date().toISOString();
@@ -65,7 +77,9 @@ app.post('/api/orders/:id/approve', (req, res) => {
 app.post('/api/orders/:id/checkout', async (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (order.status !== 'approved') {
     return res.status(400).json({ error: 'Order must be approved first.' });
@@ -81,90 +95,76 @@ app.post('/api/orders/:id/checkout', async (req, res) => {
 app.post('/api/orders/:id/generate-video', async (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (order.status !== 'paid') {
     return res.status(400).json({ error: 'Order must be paid before video generation.' });
   }
 
-  const response = await fetch('https://api.creatomate.com/v1/renders', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.CREATOMATE_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      template_id: process.env.CREATOMATE_TEMPLATE_ID,
-      modifications: {
-        "Video.source": "https://creatomate.com/files/assets/7347c3b7-e1a8-4439-96f1-f3dfc95c3d28",
-        "Text-1.text": `${order.childName}'s Magical ${order.theme} Adventure`,
-        "Text-2.text": order.story
-      }
-    })
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
+  if (!process.env.CREATOMATE_API_KEY || !process.env.CREATOMATE_TEMPLATE_ID) {
     return res.status(500).json({
-      error: 'Creatomate render failed',
-      details: data
+      error: 'Creatomate is not configured. Add CREATOMATE_API_KEY and CREATOMATE_TEMPLATE_ID in Railway.'
     });
   }
 
-  const render = Array.isArray(data) ? data[0] : data;
+  try {
+    const response = await fetch('https://api.creatomate.com/v1/renders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        template_id: process.env.CREATOMATE_TEMPLATE_ID,
+        modifications: {
+          'Video.source': 'https://creatomate.com/files/assets/7347c3b7-e1a8-4439-96f1-f3dfc95c3d28',
+          'Text-1.text': `${order.childName}'s Magical ${order.theme} Adventure`,
+          'Text-2.text': order.story
+        }
+      })
+    });
 
-  order.status = 'completed';
-  order.videoReady = true;
-  order.videoJobId = render.id;
-  order.videoUrl = render.url;
+    const data = await response.json();
 
-  orders.set(order.id, order);
+    if (!response.ok) {
+      return res.status(500).json({
+        error: 'Creatomate render failed.',
+        details: data
+      });
+    }
 
-  res.json({ order });
-});(req, res) => {
-  const order = orders.get(req.params.id);
+    const render = Array.isArray(data) ? data[0] : data;
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+    order.status = 'completed';
+    order.videoReady = true;
+    order.videoJobId = render.id;
+    order.videoUrl = render.url || render.output_url || '';
 
-  if (order.status !== 'paid') {
-    return res.status(400).json({ error: 'Order must be paid before video generation.' });
+    orders.set(order.id, order);
+    res.json({ order });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Video generation failed.',
+      details: error.message
+    });
   }
-
-  order.status = 'rendering';
-  order.videoJobId = `video_${Math.random().toString(36).slice(2, 10)}`;
-
-  orders.set(order.id, order);
-
-  setTimeout(() => {
-    const updated = orders.get(order.id);
-    if (!updated) return;
-
-    updated.status = 'completed';
-    updated.videoReady = true;
-    updated.videoUrl = `/api/orders/${updated.id}/download`;
-
-    orders.set(updated.id, updated);
-  }, 5000);
-
-  res.json({ order });
-});
-
-app.get('/api/orders/:id', (req, res) => {
-  const order = orders.get(req.params.id);
-
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
-
-  res.json({ order });
 });
 
 app.get('/api/orders/:id/download', (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (!order.videoReady) {
     return res.status(400).json({ error: 'Video is not ready yet.' });
+  }
+
+  if (order.videoUrl) {
+    return res.redirect(order.videoUrl);
   }
 
   res.setHeader('Content-Type', 'text/plain');
@@ -173,7 +173,7 @@ app.get('/api/orders/:id/download', (req, res) => {
     `attachment; filename="kidzrstarz-${order.id}-video-placeholder.txt"`
   );
 
-  res.send(`This is where the completed MP4 video for ${order.childName} will download.`);
+  res.send(`Video completed for ${order.childName}, but no video URL was returned.`);
 });
 
 app.get('*', (req, res) => {
