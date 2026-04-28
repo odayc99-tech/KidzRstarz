@@ -78,7 +78,51 @@ app.post('/api/orders/:id/checkout', async (req, res) => {
   res.json({ order });
 });
 
-app.post('/api/orders/:id/generate-video', (req, res) => {
+app.post('/api/orders/:id/generate-video', async (req, res) => {
+  const order = orders.get(req.params.id);
+
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (order.status !== 'paid') {
+    return res.status(400).json({ error: 'Order must be paid before video generation.' });
+  }
+
+  const response = await fetch('https://api.creatomate.com/v1/renders', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.CREATOMATE_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      template_id: process.env.CREATOMATE_TEMPLATE_ID,
+      modifications: {
+        "Video.source": "https://creatomate.com/files/assets/7347c3b7-e1a8-4439-96f1-f3dfc95c3d28",
+        "Text-1.text": `${order.childName}'s Magical ${order.theme} Adventure`,
+        "Text-2.text": order.story
+      }
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    return res.status(500).json({
+      error: 'Creatomate render failed',
+      details: data
+    });
+  }
+
+  const render = Array.isArray(data) ? data[0] : data;
+
+  order.status = 'completed';
+  order.videoReady = true;
+  order.videoJobId = render.id;
+  order.videoUrl = render.url;
+
+  orders.set(order.id, order);
+
+  res.json({ order });
+});(req, res) => {
   const order = orders.get(req.params.id);
 
   if (!order) return res.status(404).json({ error: 'Order not found.' });
