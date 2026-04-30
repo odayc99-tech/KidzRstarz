@@ -43,9 +43,9 @@ function showStoryPreview(order) {
       <h1>Story Preview Created 🎉</h1>
       <p><strong>Order ID:</strong> ${order.id}</p>
 
-      ${order.photoPreview ? `
-        <img src="${order.photoPreview}" alt="Uploaded child photo" style="max-width:220px;border-radius:20px;margin:20px 0;" />
-      ` : ''}
+   ${order.photoUrl ? `
+  <img src="${order.photoUrl}" alt="Uploaded child photo" style="max-width:220px;border-radius:20px;margin:20px 0;" />
+` : ''}
 
       <h2>${order.childName}'s Story</h2>
 
