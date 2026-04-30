@@ -1,11 +1,16 @@
 import express from 'express';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const orders = new Map();
 
-app.use(express.json({ limit: '10mb' }));
+const s3 = new S3Client({
+  region: process.env.S3_REGION
+});
+
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static('.'));
 
 app.get('/api/health', (req, res) => {
@@ -22,50 +27,79 @@ function makeStory({ childName, age, theme, message }) {
   ];
 }
 
-app.post('/api/orders', (req, res) => {
-  const { childName, age, theme, message, photoName, photoPreview } = req.body;
+async function uploadBase64ImageToS3(base64Image, fileName) {
+  if (!base64Image) return '';
 
-  if (!childName || !age || !theme) {
-    return res.status(400).json({ error: 'Name, age, and theme are required.' });
+  const matches = base64Image.match(/^data:(.+);base64,(.+)$/);
+
+  if (!matches) {
+    throw new Error('Invalid image upload.');
   }
 
-  const id = Math.random().toString(36).slice(2, 10);
-  const scenes = makeStory({ childName, age, theme, message });
+  const contentType = matches[1];
+  const buffer = Buffer.from(matches[2], 'base64');
 
-  const order = {
-    id,
-    childName,
-    age,
-    theme,
-    message,
-    photoName,
-    photoPreview,
-    scenes,
-    story: scenes.join('\n\n'),
-    status: 'story_ready',
-    videoReady: false
-  };
+  const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '-');
+  const key = `uploads/${Date.now()}-${safeName}`;
 
-  orders.set(id, order);
-  res.json({ order });
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType
+    })
+  );
+
+  return `https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION}.amazonaws.com/${key}`;
+}
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const { childName, age, theme, message, photoName, photoPreview } = req.body;
+
+    if (!childName || !age || !theme) {
+      return res.status(400).json({ error: 'Name, age, and theme are required.' });
+    }
+
+    const photoUrl = await uploadBase64ImageToS3(photoPreview, photoName || 'child-photo.png');
+
+    const id = Math.random().toString(36).slice(2, 10);
+    const scenes = makeStory({ childName, age, theme, message });
+
+    const order = {
+      id,
+      childName,
+      age,
+      theme,
+      message,
+      photoName,
+      photoUrl,
+      scenes,
+      story: scenes.join('\n\n'),
+      status: 'story_ready',
+      videoReady: false
+    };
+
+    orders.set(id, order);
+    res.json({ order });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Could not create order.',
+      details: error.message
+    });
+  }
 });
 
 app.get('/api/orders/:id', (req, res) => {
   const order = orders.get(req.params.id);
-
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
-
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
   res.json({ order });
 });
 
 app.post('/api/orders/:id/approve', (req, res) => {
   const order = orders.get(req.params.id);
-
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   order.status = 'approved';
   order.approvedAt = new Date().toISOString();
@@ -74,12 +108,9 @@ app.post('/api/orders/:id/approve', (req, res) => {
   res.json({ order });
 });
 
-app.post('/api/orders/:id/checkout', async (req, res) => {
+app.post('/api/orders/:id/checkout', (req, res) => {
   const order = orders.get(req.params.id);
-
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   if (order.status !== 'approved') {
     return res.status(400).json({ error: 'Order must be approved first.' });
@@ -95,18 +126,10 @@ app.post('/api/orders/:id/checkout', async (req, res) => {
 app.post('/api/orders/:id/generate-video', async (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   if (order.status !== 'paid') {
     return res.status(400).json({ error: 'Order must be paid before video generation.' });
-  }
-
-  if (!process.env.CREATOMATE_API_KEY || !process.env.CREATOMATE_TEMPLATE_ID) {
-    return res.status(500).json({
-      error: 'Creatomate is not configured. Add CREATOMATE_API_KEY and CREATOMATE_TEMPLATE_ID in Railway.'
-    });
   }
 
   try {
@@ -119,7 +142,7 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
       body: JSON.stringify({
         template_id: process.env.CREATOMATE_TEMPLATE_ID,
         modifications: {
-          'Video.source': 'https://creatomate.com/files/assets/7347c3b7-e1a8-4439-96f1-f3dfc95c3d28',
+          'Video.source': order.photoUrl,
           'Text-1.text': `${order.childName}'s Magical ${order.theme} Adventure`,
           'Text-2.text': order.story
         }
@@ -155,25 +178,13 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
 app.get('/api/orders/:id/download', (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
 
   if (!order.videoReady) {
     return res.status(400).json({ error: 'Video is not ready yet.' });
   }
 
-  if (order.videoUrl) {
-    return res.redirect(order.videoUrl);
-  }
-
-  res.setHeader('Content-Type', 'text/plain');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="kidzrstarz-${order.id}-video-placeholder.txt"`
-  );
-
-  res.send(`Video completed for ${order.childName}, but no video URL was returned.`);
+  return res.redirect(order.videoUrl);
 });
 
 app.get('*', (req, res) => {
