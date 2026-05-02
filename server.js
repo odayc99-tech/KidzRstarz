@@ -254,7 +254,7 @@ app.get('/api/orders/:id/download', (req, res) => {
   return res.redirect(order.videoUrl);
 });
 
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(process.cwd() + '/index.html');
 });
 
