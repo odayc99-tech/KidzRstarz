@@ -28,7 +28,7 @@ document.getElementById('form').onsubmit = async (e) => {
   const result = await response.json();
 
   if (!response.ok) {
-    alert(result.error || 'Something went wrong');
+    alert(JSON.stringify(result, null, 2));
     return;
   }
 
@@ -71,14 +71,11 @@ function showStoryPreview(order) {
   `;
 
   document.getElementById('approveBtn').onclick = async () => {
-    const response = await fetch(`/api/orders/${order.id}/approve`, {
-      method: 'POST'
-    });
-
+    const response = await fetch(`/api/orders/${order.id}/approve`, { method: 'POST' });
     const result = await response.json();
 
     if (!response.ok) {
-      alert(result.error || 'Could not approve story');
+      alert(JSON.stringify(result, null, 2));
       return;
     }
 
@@ -87,14 +84,11 @@ function showStoryPreview(order) {
     document.getElementById('checkoutBox').style.display = 'block';
 
     document.getElementById('checkoutBtn').onclick = async () => {
-      const response = await fetch(`/api/orders/${order.id}/checkout`, {
-        method: 'POST'
-      });
-
+      const response = await fetch(`/api/orders/${order.id}/checkout`, { method: 'POST' });
       const result = await response.json();
 
       if (!response.ok) {
-        alert(result.error || 'Checkout failed');
+        alert(JSON.stringify(result, null, 2));
         return;
       }
 
@@ -109,15 +103,11 @@ function showStoryPreview(order) {
       `;
 
       document.getElementById('generateBtn').onclick = async () => {
-        const response = await fetch(`/api/orders/${order.id}/generate-video`, {
-          method: 'POST'
-        });
-
+        const response = await fetch(`/api/orders/${order.id}/generate-video`, { method: 'POST' });
         const result = await response.json();
 
         if (!response.ok) {
-          alert(result.error || 'Failed to start video generation');
-          console.log(result);
+          alert(JSON.stringify(result, null, 2));
           return;
         }
 
@@ -130,16 +120,15 @@ function showStoryPreview(order) {
         `;
 
         document.getElementById('checkStatusBtn').onclick = async () => {
-          const res = await fetch(`/api/orders/${order.id}/check-video`);
-          const data = await res.json();
+          const response = await fetch(`/api/orders/${order.id}/check-video`);
+          const result = await response.json();
 
-          if (!res.ok) {
-            alert(data.error || 'Could not check video status');
-            console.log(data);
+          if (!response.ok) {
+            alert(JSON.stringify(result, null, 2));
             return;
           }
 
-          if (data.order.status === 'completed') {
+          if (result.order.status === 'completed') {
             document.body.innerHTML = `
               <section style="padding:60px; font-family:Arial;">
                 <h1>Video Ready 🎉</h1>
@@ -148,6 +137,8 @@ function showStoryPreview(order) {
                 </a>
               </section>
             `;
+          } else if (result.order.status === 'failed') {
+            alert(JSON.stringify(result, null, 2));
           } else {
             alert('Still rendering... wait a little longer and try again.');
           }
