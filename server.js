@@ -7,7 +7,14 @@ const PORT = process.env.PORT || 3000;
 const orders = new Map();
 
 const s3 = new S3Client({
-  region: process.env.S3_REGION
+  region: process.env.S3_REGION || 'us-east-1',
+  credentials:
+    process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY
+      ? {
+          accessKeyId: process.env.S3_ACCESS_KEY_ID,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY
+        }
+      : undefined
 });
 
 app.use(express.json({ limit: '25mb' }));
@@ -23,35 +30,52 @@ function makeStory({ childName, age, theme, message }) {
     `Scene 2: With a big smile and a curious heart, ${childName} steps into a colorful world filled with friendly characters, glowing lights, and exciting surprises.`,
     `Scene 3: A challenge appears, but ${childName} uses kindness, imagination, and courage to help everyone work together.`,
     `Scene 4: The whole world begins to shine brighter as ${childName} learns that being thoughtful, brave, and true to yourself is the greatest superpower of all.`,
-    `Scene 5: The adventure ends with cheers, music, and a special message: ${message || `${childName}, you are loved, amazing, and capable of wonderful things.`}`
+    `Scene 5: The adventure ends with cheers, music, and a special message: ${
+      message || `${childName}, you are loved, amazing, and capable of wonderful things.`
+    }`
   ];
 }
 
-async function uploadBase64ImageToS3(base64Image, fileName) {
-  if (!base64Image) return '';
+async function uploadBase64ImageToS3(base64Image, fileName = 'child-photo.png') {
+  if (!base64Image) {
+    throw new Error('No image was uploaded.');
+  }
+
+  if (!process.env.S3_BUCKET) {
+    throw new Error('S3_BUCKET is not configured.');
+  }
 
   const matches = base64Image.match(/^data:(.+);base64,(.+)$/);
 
   if (!matches) {
-    throw new Error('Invalid image upload.');
+    throw new Error('Invalid image format.');
   }
 
   const contentType = matches[1];
-  const buffer = Buffer.from(matches[2], 'base64');
+  const imageBuffer = Buffer.from(matches[2], 'base64');
 
-  const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '-');
-  const key = `uploads/${Date.now()}-${safeName}`;
+  const extension =
+    contentType === 'image/png'
+      ? 'png'
+      : contentType === 'image/webp'
+        ? 'webp'
+        : 'jpg';
+
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '-');
+  const key = `uploads/${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}-${safeFileName || `child-photo.${extension}`}`;
 
   await s3.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key: key,
-      Body: buffer,
+      Body: imageBuffer,
       ContentType: contentType
     })
   );
 
-  return `https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION}.amazonaws.com/${key}`;
+  return `https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION || 'us-east-1'}.amazonaws.com/${key}`;
 }
 
 app.post('/api/orders', async (req, res) => {
@@ -59,10 +83,15 @@ app.post('/api/orders', async (req, res) => {
     const { childName, age, theme, message, photoName, photoPreview } = req.body;
 
     if (!childName || !age || !theme) {
-      return res.status(400).json({ error: 'Name, age, and theme are required.' });
+      return res.status(400).json({
+        error: 'Name, age, and theme are required.'
+      });
     }
 
-    const photoUrl = await uploadBase64ImageToS3(photoPreview, photoName || 'child-photo.png');
+    const photoUrl = await uploadBase64ImageToS3(
+      photoPreview,
+      photoName || 'child-photo.png'
+    );
 
     const id = Math.random().toString(36).slice(2, 10);
     const scenes = makeStory({ childName, age, theme, message });
@@ -93,13 +122,20 @@ app.post('/api/orders', async (req, res) => {
 
 app.get('/api/orders/:id', (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
   res.json({ order });
 });
 
 app.post('/api/orders/:id/approve', (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   order.status = 'approved';
   order.approvedAt = new Date().toISOString();
@@ -110,10 +146,15 @@ app.post('/api/orders/:id/approve', (req, res) => {
 
 app.post('/api/orders/:id/checkout', (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (order.status !== 'approved') {
-    return res.status(400).json({ error: 'Order must be approved first.' });
+    return res.status(400).json({
+      error: 'Order must be approved first.'
+    });
   }
 
   order.status = 'paid';
@@ -126,10 +167,27 @@ app.post('/api/orders/:id/checkout', (req, res) => {
 app.post('/api/orders/:id/generate-video', async (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (order.status !== 'paid') {
-    return res.status(400).json({ error: 'Order must be paid before video generation.' });
+    return res.status(400).json({
+      error: 'Order must be paid before video generation.'
+    });
+  }
+
+  if (!process.env.CREATOMATE_API_KEY || !process.env.CREATOMATE_TEMPLATE_ID) {
+    return res.status(500).json({
+      error:
+        'Creatomate is not configured. Add CREATOMATE_API_KEY and CREATOMATE_TEMPLATE_ID in Railway.'
+    });
+  }
+
+  if (!order.photoUrl) {
+    return res.status(400).json({
+      error: 'No uploaded photo URL found for this order.'
+    });
   }
 
   try {
@@ -178,10 +236,20 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
 app.get('/api/orders/:id/download', (req, res) => {
   const order = orders.get(req.params.id);
 
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
 
   if (!order.videoReady) {
-    return res.status(400).json({ error: 'Video is not ready yet.' });
+    return res.status(400).json({
+      error: 'Video is not ready yet.'
+    });
+  }
+
+  if (!order.videoUrl) {
+    return res.status(500).json({
+      error: 'Video completed, but no video URL was returned.'
+    });
   }
 
   return res.redirect(order.videoUrl);
