@@ -133,7 +133,7 @@ function showStoryPreview(order) {
   `;
 
   document.getElementById('checkStatusBtn').onclick = async () => {
-    const res = await fetch(`/api/orders/${order.id}`);
+    const res = await fetch(`/api/orders/${order.id}/check-video`);
     const data = await res.json();
 
     if (data.order.status === 'completed') {
