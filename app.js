@@ -21,9 +21,7 @@ document.getElementById('form').onsubmit = async (e) => {
 
   const response = await fetch('/api/orders', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
 
@@ -43,9 +41,9 @@ function showStoryPreview(order) {
       <h1>Story Preview Created 🎉</h1>
       <p><strong>Order ID:</strong> ${order.id}</p>
 
-   ${order.photoUrl ? `
-  <img src="${order.photoUrl}" alt="Uploaded child photo" style="max-width:220px;border-radius:20px;margin:20px 0;" />
-` : ''}
+      ${order.photoUrl ? `
+        <img src="${order.photoUrl}" alt="Uploaded child photo" style="max-width:220px;border-radius:20px;margin:20px 0;" />
+      ` : ''}
 
       <h2>${order.childName}'s Story</h2>
 
@@ -69,10 +67,6 @@ function showStoryPreview(order) {
           Continue to Checkout
         </button>
       </div>
-
-      <p style="margin-top:30px;">
-        <a href="/">Create another</a>
-      </p>
     </section>
   `;
 
@@ -114,42 +108,51 @@ function showStoryPreview(order) {
         </button>
       `;
 
-     document.getElementById('generateBtn').onclick = async () => {
-  const response = await fetch(`/api/orders/${order.id}/generate-video`, {
-    method: 'POST'
-  });
+      document.getElementById('generateBtn').onclick = async () => {
+        const response = await fetch(`/api/orders/${order.id}/generate-video`, {
+          method: 'POST'
+        });
 
-  const result = await response.json();
+        const result = await response.json();
 
-  if (!response.ok) {
-    alert(result.error || 'Failed to start video generation');
-    return;
-  }
+        if (!response.ok) {
+          alert(result.error || 'Failed to start video generation');
+          console.log(result);
+          return;
+        }
 
-  document.getElementById('checkoutBox').innerHTML = `
-    <h2>Rendering Started 🎬</h2>
-    <p>Your video is being generated. This usually takes a few seconds.</p>
-    <button id="checkStatusBtn">Check Status</button>
-  `;
+        document.getElementById('checkoutBox').innerHTML = `
+          <h2>Rendering Started 🎬</h2>
+          <p>Your video is being generated. Wait about 30 seconds, then check status.</p>
+          <button id="checkStatusBtn" style="background:#7c3cff;color:white;padding:12px 20px;border:none;border-radius:25px;cursor:pointer;">
+            Check Status
+          </button>
+        `;
 
-  document.getElementById('checkStatusBtn').onclick = async () => {
-    const res = await fetch(`/api/orders/${order.id}/check-video`);
-    const data = await res.json();
+        document.getElementById('checkStatusBtn').onclick = async () => {
+          const res = await fetch(`/api/orders/${order.id}/check-video`);
+          const data = await res.json();
 
-    if (data.order.status === 'completed') {
-      document.body.innerHTML = `
-        <section style="padding:60px; font-family:Arial;">
-          <h1>Video Ready 🎉</h1>
-          <a href="${data.order.videoUrl}" download>
-            Download Video
-          </a>
-        </section>
-      `;
-    } else {
-      alert('Still rendering... try again in a few seconds');
-    }
-  };
-};
+          if (!res.ok) {
+            alert(data.error || 'Could not check video status');
+            console.log(data);
+            return;
+          }
+
+          if (data.order.status === 'completed') {
+            document.body.innerHTML = `
+              <section style="padding:60px; font-family:Arial;">
+                <h1>Video Ready 🎉</h1>
+                <a href="/api/orders/${order.id}/download" style="background:#00b894;color:white;padding:14px 22px;border-radius:25px;text-decoration:none;">
+                  Download Video
+                </a>
+              </section>
+            `;
+          } else {
+            alert('Still rendering... wait a little longer and try again.');
+          }
+        };
+      };
     };
   };
 }
