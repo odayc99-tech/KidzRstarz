@@ -1,5 +1,6 @@
 import express from 'express';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,68 +8,72 @@ const PORT = process.env.PORT || 3000;
 const orders = new Map();
 
 const s3 = new S3Client({
-  region: process.env.S3_REGION || 'us-east-1',
-  credentials:
-    process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY
-      ? {
-          accessKeyId: process.env.S3_ACCESS_KEY_ID,
-          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY
-        }
-      : undefined
+  region: process.env.S3_REGION,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY
+  }
 });
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.static('.'));
 
+// HEALTH
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ ok: true });
+  res.json({ ok: true });
 });
 
+// STORY GENERATOR
 function makeStory({ childName, age, theme, message }) {
   return [
-    `Scene 1: ${childName}, a bright and brave ${age}-year-old, wakes up to discover a sparkling invitation to a magical ${theme} adventure.`,
-    `Scene 2: With a big smile and a curious heart, ${childName} steps into a colorful world filled with friendly characters, glowing lights, and exciting surprises.`,
-    `Scene 3: A challenge appears, but ${childName} uses kindness, imagination, and courage to help everyone work together.`,
-    `Scene 4: The whole world begins to shine brighter as ${childName} learns that being thoughtful, brave, and true to yourself is the greatest superpower of all.`,
-    `Scene 5: The adventure ends with cheers, music, and a special message: ${
-      message || `${childName}, you are loved, amazing, and capable of wonderful things.`
-    }`
+    `Scene 1: ${childName}, a brave ${age}-year-old, begins a magical ${theme} adventure.`,
+    `Scene 2: ${childName} explores a colorful world full of wonder.`,
+    `Scene 3: A challenge appears, but ${childName} shows courage and kindness.`,
+    `Scene 4: The world shines brighter thanks to ${childName}.`,
+    `Scene 5: ${message || `${childName}, you are amazing and loved!`}`
   ];
 }
 
-async function uploadBase64ImageToS3(base64Image, fileName = 'child-photo.png') {
-  if (!base64Image) throw new Error('No image was uploaded.');
-  if (!process.env.S3_BUCKET) throw new Error('S3_BUCKET is not configured.');
-
+// S3 UPLOAD
+async function uploadBase64ImageToS3(base64Image, fileName = 'photo.jpg') {
   const matches = base64Image.match(/^data:(.+);base64,(.+)$/);
-  if (!matches) throw new Error('Invalid image format.');
+  if (!matches) throw new Error('Invalid image format');
 
   const contentType = matches[1];
-  const imageBuffer = Buffer.from(matches[2], 'base64');
-  const safeFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '-');
-  const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeFileName}`;
+  const buffer = Buffer.from(matches[2], 'base64');
+
+  const key = `uploads/${Date.now()}-${fileName}`;
 
   await s3.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key: key,
-      Body: imageBuffer,
+      Body: buffer,
       ContentType: contentType
     })
   );
 
-  return `https://${process.env.S3_BUCKET}.s3.${process.env.S3_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+  return key;
 }
 
+// CREATE SIGNED URL
+async function getSignedImageUrl(key) {
+  return await getSignedUrl(
+    s3,
+    new GetObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key
+    }),
+    { expiresIn: 60 * 60 }
+  );
+}
+
+// CREATE ORDER
 app.post('/api/orders', async (req, res) => {
   try {
-    const { childName, age, theme, message, photoName, photoPreview } = req.body;
+    const { childName, age, theme, message, photoPreview, photoName } = req.body;
 
-    if (!childName || !age || !theme) {
-      return res.status(400).json({ error: 'Name, age, and theme are required.' });
-    }
-
-    const photoUrl = await uploadBase64ImageToS3(photoPreview, photoName || 'child-photo.png');
+    const key = await uploadBase64ImageToS3(photoPreview, photoName);
 
     const id = Math.random().toString(36).slice(2, 10);
     const scenes = makeStory({ childName, age, theme, message });
@@ -79,85 +84,57 @@ app.post('/api/orders', async (req, res) => {
       age,
       theme,
       message,
-      photoName,
-      photoUrl,
+      photoKey: key,
       scenes,
       story: scenes.join('\n\n'),
-      status: 'story_ready',
-      videoReady: false
+      status: 'story_ready'
     };
 
     orders.set(id, order);
-    res.json({ order });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Could not create order.',
-      details: error.message
-    });
+
+    const photoUrl = await getSignedImageUrl(key);
+
+    res.json({ order: { ...order, photoUrl } });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create order.', details: e.message });
   }
 });
 
-app.get('/api/orders/:id', (req, res) => {
+// GET ORDER
+app.get('/api/orders/:id', async (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
-  res.json({ order });
+  if (!order) return res.status(404).json({ error: 'Not found' });
+
+  const photoUrl = await getSignedImageUrl(order.photoKey);
+
+  res.json({ order: { ...order, photoUrl } });
 });
 
+// APPROVE
 app.post('/api/orders/:id/approve', (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (!order) return res.status(404).json({ error: 'Not found' });
 
   order.status = 'approved';
-  order.approvedAt = new Date().toISOString();
-
-  orders.set(order.id, order);
   res.json({ order });
 });
 
+// CHECKOUT
 app.post('/api/orders/:id/checkout', (req, res) => {
   const order = orders.get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
-
-  if (order.status !== 'approved') {
-    return res.status(400).json({ error: 'Order must be approved first.' });
-  }
+  if (!order) return res.status(404).json({ error: 'Not found' });
 
   order.status = 'paid';
-  order.paidAt = new Date().toISOString();
-
-  orders.set(order.id, order);
   res.json({ order });
 });
 
+// GENERATE VIDEO
 app.post('/api/orders/:id/generate-video', async (req, res) => {
   try {
     const order = orders.get(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Not found' });
 
-    if (!order) return res.status(404).json({ error: 'Order not found.' });
-
-    if (order.status !== 'paid') {
-      return res.status(400).json({ error: 'Order must be paid before video generation.' });
-    }
-
-    if (!order.photoUrl) {
-      return res.status(400).json({ error: 'No uploaded photo URL found.', order });
-    }
-
-    if (!process.env.CREATOMATE_API_KEY || !process.env.CREATOMATE_TEMPLATE_ID) {
-      return res.status(500).json({
-        error: 'Creatomate is not configured.',
-        details: 'Add CREATOMATE_API_KEY and CREATOMATE_TEMPLATE_ID in Railway.'
-      });
-    }
-
-    const payload = {
-      template_id: process.env.CREATOMATE_TEMPLATE_ID,
-      modifications: {
-        'Image.source': order.photoUrl,
-        'Text-1.text': `${order.childName}'s Magical ${order.theme} Adventure`,
-        'Text-2.text': order.story
-      }
-    };
+    const imageUrl = await getSignedImageUrl(order.photoKey);
 
     const response = await fetch('https://api.creatomate.com/v1/renders', {
       method: 'POST',
@@ -165,7 +142,14 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
         Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        template_id: process.env.CREATOMATE_TEMPLATE_ID,
+        modifications: {
+          'Image.source': imageUrl,
+          'Text-1.text': `${order.childName}'s Adventure`,
+          'Text-2.text': order.story
+        }
+      })
     });
 
     const data = await response.json();
@@ -173,7 +157,6 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
     if (!response.ok) {
       return res.status(500).json({
         error: 'Creatomate render failed.',
-        payload,
         details: data
       });
     }
@@ -181,83 +164,71 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
     const render = Array.isArray(data) ? data[0] : data;
 
     order.status = 'rendering';
-    order.videoReady = false;
     order.videoJobId = render.id;
 
-    orders.set(order.id, order);
-
-    res.json({ order, render });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Video generation crashed.',
-      details: error.message,
-      stack: error.stack
-    });
+    res.json({ order });
+  } catch (e) {
+    res.status(500).json({ error: 'Video generation failed', details: e.message });
   }
 });
 
+// CHECK VIDEO STATUS
 app.get('/api/orders/:id/check-video', async (req, res) => {
+  const order = orders.get(req.params.id);
+  if (!order) return res.status(404).json({ error: 'Not found' });
+
+  const response = await fetch(`https://api.creatomate.com/v1/renders/${order.videoJobId}`, {
+    headers: {
+      Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`
+    }
+  });
+
+  const render = await response.json();
+
+  if (render.status === 'succeeded') {
+    order.status = 'completed';
+    order.videoUrl = render.url;
+  }
+
+  res.json({ order });
+});
+
+// ✅ DOWNLOAD (FORCED DOWNLOAD FIX)
+app.get('/api/orders/:id/download', async (req, res) => {
   try {
     const order = orders.get(req.params.id);
 
     if (!order) return res.status(404).json({ error: 'Order not found.' });
 
-    if (!order.videoJobId) {
-      return res.status(400).json({ error: 'No video job found.' });
+    if (!order.videoUrl) {
+      return res.status(400).json({ error: 'Video not ready.' });
     }
 
-    const response = await fetch(`https://api.creatomate.com/v1/renders/${order.videoJobId}`, {
-      headers: {
-        Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}`
-      }
-    });
+    const videoResponse = await fetch(order.videoUrl);
 
-    const render = await response.json();
-
-    if (!response.ok) {
-      return res.status(500).json({
-        error: 'Could not check render status.',
-        details: render
-      });
+    if (!videoResponse.ok) {
+      return res.status(500).json({ error: 'Failed to fetch video.' });
     }
 
-    if (render.status === 'succeeded' && render.url) {
-      order.status = 'completed';
-      order.videoReady = true;
-      order.videoUrl = render.url;
-    } else if (render.status === 'failed') {
-      order.status = 'failed';
-      order.errorMessage = render.error || 'Creatomate render failed.';
-    } else {
-      order.status = 'rendering';
-    }
+    const buffer = Buffer.from(await videoResponse.arrayBuffer());
 
-    orders.set(order.id, order);
-    res.json({ order, render });
-  } catch (error) {
-    res.status(500).json({
-      error: 'Video status check crashed.',
-      details: error.message
-    });
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="kidzrstarz-${order.id}.mp4"`
+    );
+
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ error: 'Download failed.', details: e.message });
   }
 });
 
-app.get('/api/orders/:id/download', (req, res) => {
-  const order = orders.get(req.params.id);
-
-  if (!order) return res.status(404).json({ error: 'Order not found.' });
-
-  if (!order.videoReady || !order.videoUrl) {
-    return res.status(400).json({ error: 'Video is not ready yet.' });
-  }
-
-  return res.redirect(order.videoUrl);
-});
-
+// FRONTEND
 app.use((req, res) => {
   res.sendFile(process.cwd() + '/index.html');
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Running on ${PORT}`);
 });
