@@ -144,13 +144,22 @@ app.post('/api/orders/:id/generate-video', async (req, res) => {
       },
       body: JSON.stringify({
         template_id: process.env.CREATOMATE_TEMPLATE_ID,
-        modifications: {
-          'Image.source': imageUrl,
-          'Text-1.text': `${order.childName}'s Adventure`,
-          'Text-2.text': order.story
-        }
-      })
-    });
+       modifications: {
+  'Image-1.source': imageUrl,
+  'Text-1.text': order.scenes[0],
+
+  'Image-2.source': imageUrl,
+  'Text-2.text': order.scenes[1],
+
+  'Image-3.source': imageUrl,
+  'Text-3.text': order.scenes[2],
+
+  'Image-4.source': imageUrl,
+  'Text-4.text': order.scenes[3],
+
+  'Image-5.source': imageUrl,
+  'Text-5.text': order.scenes[4]
+}
 
     const data = await response.json();
 
