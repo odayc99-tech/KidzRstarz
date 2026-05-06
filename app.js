@@ -28,7 +28,8 @@ document.getElementById('form').onsubmit = async (e) => {
   const result = await response.json();
 
   if (!response.ok) {
-    alert(JSON.stringify(result, null, 2));
+    alert(JSON.stringify(result.details || result, null, 2));
+console.log(result);
     return;
   }
 
